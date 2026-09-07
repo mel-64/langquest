@@ -552,11 +552,11 @@ changelog version=version:
 
 # install the release version (default is the latest)
 install-release release=release:
-    cargo install --git {{ url }} --tag {{ release }}
+    cargo install --git {{ url }} --tag {{ release }} lq
 
 # install the nightly release
 install-nightly:
-    cargo install --git {{ url }}
+    cargo install --git {{ url }} lq
 
 # Build and copy the release version of the program
 build:
