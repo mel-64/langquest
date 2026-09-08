@@ -64,7 +64,8 @@ impl Default for ExerciseState {
 }
 
 /// Configuration for the Ripes RISC-V simulator.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct RipesConfig {
   /// Explicit path to the Ripes binary.
   ///
@@ -94,7 +95,8 @@ impl Default for RipesConfig {
 }
 
 /// Configuration for the Rust toolchain.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct RustConfig {
   /// Command template used to compile the student source as a test binary.
   ///
@@ -116,7 +118,8 @@ impl Default for RustConfig {
 }
 
 /// Configuration for the Python toolchain.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct PythonConfig {
   /// Command template used to run the student's Python tests.
   ///
@@ -135,7 +138,8 @@ impl Default for PythonConfig {
 }
 
 /// Configuration for the Go toolchain.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct GoConfig {
   /// Command template used to run the student's Go tests.
   ///
@@ -154,7 +158,8 @@ impl Default for GoConfig {
 }
 
 /// Configuration for the C++ toolchain.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct CppConfig {
   /// Command template used to compile the student's C++ source files.
   ///
@@ -174,7 +179,8 @@ impl Default for CppConfig {
 }
 
 /// Configuration for PlantUML rendering.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct PlantumlConfig {
   /// Explicit path to a pre-existing PlantUML jar (or launcher script).
   ///
@@ -203,7 +209,8 @@ impl Default for PlantumlConfig {
 
 /// Configuration for the external editor / IDE used by the `e` shortcut and to
 /// preview rendered PlantUML diagrams.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct IdeConfig {
   /// Path to the IDE launcher (e.g. `zed` or `code`).
   ///
