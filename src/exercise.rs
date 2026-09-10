@@ -140,6 +140,17 @@ impl Language {
       _ => None,
     }
   }
+
+  /// Additional file names relative to the exercise directory whose changes
+  /// should trigger re-verification.
+  ///
+  /// No existence check needed as we just filter events in the watcher function.
+  pub fn reload_trigger_files(&self) -> Vec<&'static str> {
+    match self {
+      Language::Rust => vec!["Cargo.toml"],
+      _ => Vec::new(),
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -229,6 +240,9 @@ pub struct Exercise {
   pub task_path: PathBuf,
   /// Path to the student source file (`main.*`).
   pub source_path: PathBuf,
+  /// Additional file names relative to the exercise directory whose changes
+  /// should trigger re-verification.
+  pub reload_files: Vec<&'static str>,
   /// Path to `solution/main.*`, if present.
   pub solution_source: Option<PathBuf>,
   /// Parsed contents of `solution/solution.md`, if present.
@@ -429,6 +443,9 @@ pub fn load_exercise(exercise_dir: &Path, module_name: &str) -> Result<Exercise,
   // -- Locate student source file (main.*) --------------------------------
   let source_path = find_student_source(exercise_dir)?;
 
+  // -- Additional files triggering a reload -------------------------------
+  let reload_files = fm.language.reload_trigger_files();
+
   // -- Optional: 01-theory.md ---------------------------------------------
   let theory_candidate = exercise_dir.join("01-theory.md");
   let theory_path = if theory_candidate.is_file() { Some(theory_candidate) } else { None };
@@ -464,6 +481,7 @@ pub fn load_exercise(exercise_dir: &Path, module_name: &str) -> Result<Exercise,
     theory_path,
     task_path,
     source_path,
+    reload_files,
     solution_source,
     solution_data,
     test_count,
@@ -746,6 +764,25 @@ mod tests {
     assert_eq!(src.extension().and_then(|e| e.to_str()), Some("puml"));
 
     let _ = fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn reload_trigger_files_list_cargo_toml_for_rust() {
+    let tmp = std::env::temp_dir().join("lq_test_reload_paths");
+    let _ = fs::remove_dir_all(&tmp);
+    let ex_dir = tmp.join("01-hello");
+    fs::create_dir_all(&ex_dir).unwrap();
+    fs::write(
+      ex_dir.join("02-task.md"),
+      "---\nid=\"hello\"\nname=\"Hello\"\nlanguage=\"rust\"\ndifficulty=1\ndescription=\"d\"\ntopics=[]\n---\n",
+    )
+    .unwrap();
+    fs::write(ex_dir.join("main.rs"), "fn main() {}").unwrap();
+
+    let exercise = load_exercise(&ex_dir, "01-basics").unwrap();
+    assert_eq!(exercise.reload_files, vec!["Cargo.toml"]);
+
+    let _ = fs::remove_dir_all(&tmp);
   }
 
   #[test]
