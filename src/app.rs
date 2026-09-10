@@ -372,10 +372,15 @@ impl App {
     let _ = self.config.save(&self.config_path);
   }
 
-  /// Create an `ExerciseWatcher` for the current exercise's source file.
+  /// Create an `ExerciseWatcher` for the current exercise's source file(-s).
   fn setup_watcher(&mut self) {
-    let source = self.current_exercise().source_path.clone();
-    self.watcher = ExerciseWatcher::new(&source).ok();
+    let exercise = self.current_exercise();
+    let watch_dir = exercise.dir.clone();
+    let mut file_names: Vec<String> = exercise.reload_files.iter().map(|s| s.to_string()).collect();
+    if let Some(name) = exercise.source_path.file_name() {
+      file_names.push(name.to_string_lossy().into_owned());
+    }
+    self.watcher = ExerciseWatcher::new(&watch_dir, file_names).ok();
   }
 
   /// For a PlantUML exercise, render the diagram source to a PNG (in a detached

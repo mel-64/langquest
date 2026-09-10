@@ -454,6 +454,7 @@ mod tests {
       theory_path: None,
       task_path: PathBuf::new(),
       source_path: PathBuf::new(),
+      reload_files: Vec::new(),
       solution_source: None,
       solution_data,
       test_count: 0,

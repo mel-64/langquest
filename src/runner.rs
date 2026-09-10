@@ -1953,9 +1953,9 @@ fn levenshtein(a: &[char], b: &[char]) -> usize {
 // ExerciseWatcher
 // ---------------------------------------------------------------------------
 
-/// Watches an exercise source file for changes and sends a `()` signal
+/// Watches an exercise's source file(-s) for changes and sends a `()` signal
 /// through [`event_rx`](Self::event_rx) each time a create or modify event
-/// is detected.
+/// targeting any of them is detected.
 ///
 /// The application layer is responsible for calling [`verify`] when a signal
 /// arrives - the watcher itself performs no verification work.
@@ -1963,13 +1963,13 @@ pub struct ExerciseWatcher {
   /// Held to keep the underlying OS watcher alive.  Dropped when the
   /// struct is dropped, which stops watching.
   _watcher: Box<dyn Watcher + Send>,
-  /// Receives `()` each time the watched file is created or modified.
+  /// Receives `()` each time a watched file is created or modified.
   pub event_rx: mpsc::Receiver<()>,
 }
 
 impl ExerciseWatcher {
-  /// Begin watching the parent of `source_path` (a single file) for create / modify
-  /// events and filter for events targeting `source_path`.
+  /// Begin watching `watch_dir` for create / modify events and filter for
+  /// events targeting any of the given `file_names`.
   /// This methodology prevents problems with some editors on linux which perform
   /// atomic swaps.
   ///
@@ -1977,20 +1977,17 @@ impl ExerciseWatcher {
   ///
   /// Returns an error if the underlying OS watcher cannot be created or if
   /// the path cannot be watched (e.g. it does not exist).
-  pub fn new(source_path: &Path) -> anyhow::Result<Self> {
+  pub fn new(watch_dir: &Path, file_names: Vec<String>) -> anyhow::Result<Self> {
     let (tx, rx) = mpsc::channel();
-    let file_name = source_path
-      .file_name()
-      .ok_or_else(|| anyhow::anyhow!("source file {:?} is not a file", source_path))?
-      .to_os_string();
-    let parent = source_path
-      .parent()
-      .ok_or_else(|| anyhow::anyhow!("source file {:?} does not have a parent dir", source_path))?;
 
     let callback = move |res: Result<notify::Event, notify::Error>| {
       if let Ok(event) = res
         && matches!(event.kind, EventKind::Create(_) | EventKind::Modify(_))
-        && event.paths.iter().any(|p| p.file_name() == Some(&file_name))
+        && event
+          .paths
+          .iter()
+          .filter_map(|p| p.file_name()?.to_str())
+          .any(|n| file_names.iter().any(|m| m == n))
       {
         // Ignore send errors - the receiver may have been
         // dropped if the app is shutting down.
@@ -2011,7 +2008,7 @@ impl ExerciseWatcher {
       None => Box::new(RecommendedWatcher::new(callback, Config::default())?),
     };
 
-    watcher.watch(parent, RecursiveMode::NonRecursive)?;
+    watcher.watch(watch_dir, RecursiveMode::NonRecursive)?;
 
     Ok(Self {
       _watcher: watcher,
