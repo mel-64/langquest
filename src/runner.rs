@@ -9,15 +9,17 @@
 //!
 //! * **No panics** - every runner catches errors and returns
 //!   [`VerificationResult`] with `score == 0.0` and a human-readable `output`.
-//! * All child processes are run via [`std::process::Command::output`], which
-//!   captures both stdout and stderr.  A 30-second timeout is not enforced at
-//!   the process level today; callers that need a bound should wrap the call in
-//!   a thread with a deadline.
+//! * All child processes are run via [`run_command_cancellable`], which
+//!   captures both stdout and stderr while readind the pipes concurrently so
+//!   that verbose children can not lock up due to a full pipe buffer. A 30-second
+//!   timeout is not enforced at the process level today; callers that need a
+//!   bound should wrap the call in a thread with a deadline.
 //! * Temporary artefacts (`.lq_test_*`, `.lq_main.o`, `.lq_main`) are cleaned up
 //!   on a best-effort basis - cleanup failures are silently ignored.
 
 use std::collections::HashMap;
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::sync::Arc;
@@ -142,12 +144,17 @@ impl VerifyCancel {
   }
 }
 
+#[derive(Debug)]
 enum RunError {
   Io(std::io::Error),
   Cancelled,
 }
 
 /// Spawn a child process and capture output while supporting cooperative cancellation.
+///
+/// stdout and stderr are read in the background while the parent polls for exit.
+/// Without this, a child process printing more data then the pipe buffer (~64 KiB)
+/// can hold, blocks forever on `write()` and therefore never exists
 fn run_command_cancellable(cmd: &mut Command, cancel: &VerifyCancel) -> Result<Output, RunError> {
   if cancel.is_cancelled() {
     return Err(RunError::Cancelled);
@@ -155,21 +162,45 @@ fn run_command_cancellable(cmd: &mut Command, cancel: &VerifyCancel) -> Result<O
 
   let mut child = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(RunError::Io)?;
 
+  let stdout_pipe = child.stdout.take();
+  let stderr_pipe = child.stderr.take();
+
+  let stdout_reader = thread::spawn(move || {
+    let mut buf = Vec::new();
+    if let Some(mut pipe) = stdout_pipe {
+      let _ = pipe.read_to_end(&mut buf);
+    }
+    buf
+  });
+  let stderr_reader = thread::spawn(move || {
+    let mut buf = Vec::new();
+    if let Some(mut pipe) = stderr_pipe {
+      let _ = pipe.read_to_end(&mut buf);
+    }
+    buf
+  });
+
   loop {
     if cancel.is_cancelled() {
       let _ = child.kill();
       let _ = child.wait();
+      let _ = stdout_reader.join();
+      let _ = stderr_reader.join();
       return Err(RunError::Cancelled);
     }
 
     match child.try_wait() {
-      Ok(Some(_)) => {
-        return child.wait_with_output().map_err(RunError::Io);
+      Ok(Some(status)) => {
+        let stdout = stdout_reader.join().unwrap_or_default();
+        let stderr = stderr_reader.join().unwrap_or_default();
+        return Ok(Output { status, stdout, stderr });
       }
       Ok(None) => thread::sleep(Duration::from_millis(25)),
       Err(e) => {
         let _ = child.kill();
         let _ = child.wait();
+        let _ = stdout_reader.join();
+        let _ = stderr_reader.join();
         return Err(RunError::Io(e));
       }
     }
@@ -1953,9 +1984,9 @@ fn levenshtein(a: &[char], b: &[char]) -> usize {
 // ExerciseWatcher
 // ---------------------------------------------------------------------------
 
-/// Watches an exercise source file for changes and sends a `()` signal
+/// Watches an exercise's source file(-s) for changes and sends a `()` signal
 /// through [`event_rx`](Self::event_rx) each time a create or modify event
-/// is detected.
+/// targeting any of them is detected.
 ///
 /// The application layer is responsible for calling [`verify`] when a signal
 /// arrives - the watcher itself performs no verification work.
@@ -1963,13 +1994,13 @@ pub struct ExerciseWatcher {
   /// Held to keep the underlying OS watcher alive.  Dropped when the
   /// struct is dropped, which stops watching.
   _watcher: Box<dyn Watcher + Send>,
-  /// Receives `()` each time the watched file is created or modified.
+  /// Receives `()` each time a watched file is created or modified.
   pub event_rx: mpsc::Receiver<()>,
 }
 
 impl ExerciseWatcher {
-  /// Begin watching the parent of `source_path` (a single file) for create / modify
-  /// events and filter for events targeting `source_path`.
+  /// Begin watching `watch_dir` for create / modify events and filter for
+  /// events targeting any of the given `file_names`.
   /// This methodology prevents problems with some editors on linux which perform
   /// atomic swaps.
   ///
@@ -1977,20 +2008,17 @@ impl ExerciseWatcher {
   ///
   /// Returns an error if the underlying OS watcher cannot be created or if
   /// the path cannot be watched (e.g. it does not exist).
-  pub fn new(source_path: &Path) -> anyhow::Result<Self> {
+  pub fn new(watch_dir: &Path, file_names: Vec<String>) -> anyhow::Result<Self> {
     let (tx, rx) = mpsc::channel();
-    let file_name = source_path
-      .file_name()
-      .ok_or_else(|| anyhow::anyhow!("source file {:?} is not a file", source_path))?
-      .to_os_string();
-    let parent = source_path
-      .parent()
-      .ok_or_else(|| anyhow::anyhow!("source file {:?} does not have a parent dir", source_path))?;
 
     let callback = move |res: Result<notify::Event, notify::Error>| {
       if let Ok(event) = res
         && matches!(event.kind, EventKind::Create(_) | EventKind::Modify(_))
-        && event.paths.iter().any(|p| p.file_name() == Some(&file_name))
+        && event
+          .paths
+          .iter()
+          .filter_map(|p| p.file_name()?.to_str())
+          .any(|n| file_names.iter().any(|m| m == n))
       {
         // Ignore send errors - the receiver may have been
         // dropped if the app is shutting down.
@@ -2011,7 +2039,7 @@ impl ExerciseWatcher {
       None => Box::new(RecommendedWatcher::new(callback, Config::default())?),
     };
 
-    watcher.watch(parent, RecursiveMode::NonRecursive)?;
+    watcher.watch(watch_dir, RecursiveMode::NonRecursive)?;
 
     Ok(Self {
       _watcher: watcher,
@@ -2483,6 +2511,39 @@ addi s2, s0, 1
       assert!(combined.contains("hello"));
       assert!(combined.contains("err"));
     }
+  }
+
+  // -- run_command_cancellable ------------------------------------------
+
+  #[test]
+  #[cfg(unix)]
+  fn run_command_cancellable_drains_large_output() {
+    // Make sure that the pipe buffer is correctly continuesly read
+    let cancel = VerifyCancel::new(Arc::new(AtomicU64::new(0)), 0);
+    let mut cmd = Command::new("sh");
+    cmd.args(["-c", "for i in $(seq 1 100000); do echo \"line-$i-awawawawawawawawa123456789\"; done"]);
+    let out = run_command_cancellable(&mut cmd, &cancel).expect("command should complete");
+    assert!(out.status.success());
+    assert!(out.stdout.len() > 100_000, "expected >100 KiB of output");
+  }
+
+  #[test]
+  #[cfg(unix)]
+  fn run_command_cancellable_cancels_chatty_child() {
+    // Cancelling must work even while the child is blocked due to writing to a
+    // full pipe
+    let generation = Arc::new(AtomicU64::new(0));
+    let cancel = VerifyCancel::new(Arc::clone(&generation), 0);
+    let generation2 = Arc::clone(&generation);
+    thread::spawn(move || {
+      thread::sleep(Duration::from_millis(150));
+      generation2.store(1, Ordering::Relaxed);
+    });
+
+    let mut cmd = Command::new("sh");
+    cmd.args(["-c", "while true; do echo spam; done"]);
+    let result = run_command_cancellable(&mut cmd, &cancel);
+    assert!(matches!(result, Err(RunError::Cancelled)));
   }
 
   // -- parse_catch2_output ---------------------------------------------
