@@ -345,11 +345,12 @@ fn verify_rust(exercise: &Exercise, rust_cfg: &RustConfig, cancel: &VerifyCancel
 
   let run = match run {
     Ok(o) => o,
-    Err(RunError::Io(e)) => {
-      return VerificationResult::zero(format!("Failed to execute test binary: {e}"), threshold);
-    }
-    Err(RunError::Cancelled) => {
-      return VerificationResult::zero("Verification cancelled.".to_string(), threshold);
+    Err(e) => {
+      let _ = fs::remove_file(&test_bin);
+      return match e {
+        RunError::Io(e) => VerificationResult::zero(format!("Failed to execute test binary: {e}"), threshold),
+        RunError::Cancelled => VerificationResult::zero("Verification cancelled.".to_string(), threshold),
+      };
     }
   };
 
