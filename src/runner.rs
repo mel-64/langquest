@@ -217,7 +217,7 @@ fn run_command_cancellable(cmd: &mut Command, cancel: &VerifyCancel) -> Result<O
 /// returned result has `score == 0.0` and the error description in `output`.
 pub fn verify(exercise: &Exercise, config: &ProjectConfig, cancel: &VerifyCancel) -> VerificationResult {
   if cancel.is_cancelled() {
-    return VerificationResult::zero("Verification cancelled.".to_string(), exercise.language.threshold());
+    return VerificationResult::zero("Verification cancelled.".to_string(), exercise.threshold);
   }
 
   match exercise.language {
@@ -282,7 +282,7 @@ fn build_rust_command(cfg: &RustConfig, src_path: &Path, out_path: &Path) -> Res
 /// Runs tests with `--nocapture` so `println!` inside test functions
 /// is visible in the output.
 fn verify_rust(exercise: &Exercise, rust_cfg: &RustConfig, cancel: &VerifyCancel) -> VerificationResult {
-  let threshold = exercise.language.threshold();
+  let threshold = exercise.threshold;
   let is_cargo = exercise.dir.join("Cargo.toml").is_file();
 
   // --- compile --------------------------------------------------------
@@ -870,7 +870,7 @@ fn regs_equal(actual: i64, expected: i64) -> bool {
 /// Score is `satisfied / total_directives`.  If no directives are present the
 /// score is `0.0` and the output explains how to add them.
 fn verify_riscv(exercise: &Exercise, ripes_cfg: &RipesConfig, cancel: &VerifyCancel) -> VerificationResult {
-  let threshold = exercise.language.threshold();
+  let threshold = exercise.threshold;
 
   // --- read source for directives ------------------------------------
   let source = match fs::read_to_string(&exercise.source_path) {
@@ -1043,7 +1043,7 @@ fn build_python_command(cfg: &PythonConfig, src_path: &Path) -> Result<(PathBuf,
 /// Falls back to running the script directly with the configured interpreter
 /// if `pytest` is absent (i.e. "No module named pytest" appears in output).
 fn verify_python(exercise: &Exercise, python_cfg: &PythonConfig, cancel: &VerifyCancel) -> VerificationResult {
-  let threshold = exercise.language.threshold();
+  let threshold = exercise.threshold;
 
   let (pytest_bin, pytest_args) = match build_python_command(python_cfg, &exercise.source_path) {
     Ok(b) => b,
@@ -1075,7 +1075,7 @@ fn verify_python(exercise: &Exercise, python_cfg: &PythonConfig, cancel: &Verify
 /// Fallback: run the script directly with the configured interpreter and parse
 /// unittest output.
 fn verify_python_fallback(exercise: &Exercise, python_bin: &Path, cancel: &VerifyCancel) -> VerificationResult {
-  let threshold = exercise.language.threshold();
+  let threshold = exercise.threshold;
 
   let mut run_cmd = Command::new(python_bin);
   run_cmd.arg(&exercise.source_path).current_dir(&exercise.dir);
@@ -1114,7 +1114,7 @@ fn build_go_command(cfg: &GoConfig) -> Result<(PathBuf, Vec<String>), String> {
 /// Score is `passed / (passed + failed)` based on `--- PASS:` and
 /// `--- FAIL:` lines in the verbose test output.
 fn verify_go(exercise: &Exercise, go_cfg: &GoConfig, cancel: &VerifyCancel) -> VerificationResult {
-  let threshold = exercise.language.threshold();
+  let threshold = exercise.threshold;
 
   let (go_bin, go_args) = match build_go_command(go_cfg) {
     Ok(b) => b,
@@ -1267,7 +1267,7 @@ fn build_cpp_command(cfg: &CppConfig, sources: &[PathBuf], out_path: &Path) -> R
 ///
 /// Score is `passed / (passed + failed)` based on the Catch2 summary line.
 fn verify_cpp(exercise: &Exercise, cpp_cfg: &CppConfig, cancel: &VerifyCancel) -> VerificationResult {
-  let threshold = exercise.language.threshold();
+  let threshold = exercise.threshold;
 
   // Use a unique binary name per invocation to avoid "Text file busy"
   // (ETXTBUSY) when multiple tests or processes compile in the same dir.
@@ -1535,7 +1535,7 @@ fn keyword_matches(kw: &str, content: &str) -> bool {
 }
 
 fn verify_text(exercise: &Exercise, use_marker: bool, strip: Option<&str>) -> VerificationResult {
-  let threshold = exercise.language.threshold();
+  let threshold = exercise.threshold;
 
   let solution_data = match &exercise.solution_data {
     Some(data) => data,
@@ -2054,6 +2054,7 @@ mod tests {
         explanation: String::new(),
       }),
       test_count: 0,
+      threshold: Language::Text.threshold(),
       reload_files: vec![],
     }
   }
