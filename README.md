@@ -315,7 +315,7 @@ The **`e`** shortcut opens the current exercise's source file in the editor conf
 ### File watching
 
 `lq` uses file system events (e.g. inotify) to detect saves and automatically re-verify the exercises. Some environments like Docker containers on Windows do not send events to the langquest process.
-Set the `POLLING_MS` environment variableto to enable a polling watcher instead:
+Set the `POLLING_MS` environment variable to enable a polling watcher instead:
 
 ```sh
 POLLING_MS=1000 lq {args}
@@ -342,7 +342,7 @@ Running `lq -s` also writes a machine-readable **`results.toml`** at the repo ro
 ```toml
 [meta]
 generated_at = 1786454786
-lq_version = "0.1.0"
+lq_version = "0.2.3"
 
 [student]
 verified = true
@@ -707,7 +707,7 @@ Usage: lq [OPTIONS] [COMMAND]
 
 Commands:
   status          Print current exercise and overall progress
-  verify          Check that every exercise parses correctly
+  verify          Check if every exercise in the repo parses correctly
   seal-solutions  Encrypt every `solution/` file in place (teacher → student repo, for CI)
   help            Print this message or the help of the given subcommand(s)
 
@@ -715,8 +715,8 @@ Options:
   -r  --repo <REPO>  Path to exercise repository root
       --reset        Wipe all progress in lq.toml and start fresh
   -s, --stats        Display detailed statistics about exercise progress
-  -k, --keys         Print version and hashes of embedded crypto keys
-  -t, --toolchain    Print the toolchain report (lq.toml location + tool status), then exit
+  -k, --keys         Print version and hashes of embedded crypto keys, then exit
+  -t, --toolchain    Print the toolchain report (lq.toml location + tool status), then exit, then exit
   -h, --help         Print help
   -V, --version      Print version
 ```
