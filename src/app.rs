@@ -301,18 +301,27 @@ impl App {
   }
 
   /// Switch to a new exercise by index, updating all related state.
+  /// This also drops the old cargo build cache, if appropriate.
   fn switch_exercise(&mut self, new_index: usize) {
     if new_index >= self.exercises.len() {
       return;
     }
-    self.current_index = new_index;
-    let exercise = self.current_exercise();
-    self.config.current_exercise = Some(exercise.relative_path.clone());
-    self.hints_revealed = 0;
-    self.solution_unlock_pending = false;
-    self.last_main_output.clear();
-    self.page = ExercisePage::Theory;
-    self.scroll_offset = 0;
+    if new_index != self.current_index {
+      // Drop the previous exercise's cargo build cache.
+      if self.exercises[self.current_index].language == Language::Rust {
+        let old_target = self.exercises[self.current_index].dir.join("target");
+        let _ = std::fs::remove_dir_all(old_target);
+      }
+      self.current_index = new_index;
+      let exercise = self.current_exercise();
+      self.config.current_exercise = Some(exercise.relative_path.clone());
+      self.hints_revealed = 0;
+      self.solution_unlock_pending = false;
+      self.last_main_output.clear();
+      self.page = ExercisePage::Theory;
+      self.scroll_offset = 0;
+    }
+    // Always refresh so state is clean even if the same exercise is re-selected.
     self.setup_watcher();
     self.queue_verify();
     self.maybe_render_plantuml();
