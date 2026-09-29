@@ -31,9 +31,8 @@ jobs:
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
-          args: --prepend --strip all --latest
+          args: --prepend CHANGELOG.md --strip all --latest
         env:
-          OUTPUT: CHANGELOG.md
           GITHUB_REPO: ${{ github.repository }}
 
       - name: Upload Changelog
