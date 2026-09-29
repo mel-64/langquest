@@ -346,7 +346,9 @@ fn verify_rust(exercise: &Exercise, rust_cfg: &RustConfig, cancel: &VerifyCancel
   let run = match run {
     Ok(o) => o,
     Err(e) => {
-      let _ = fs::remove_file(&test_bin);
+      if !is_cargo {
+        let _ = fs::remove_file(&test_bin);
+      }
       return match e {
         RunError::Io(e) => VerificationResult::zero(format!("Failed to execute test binary: {e}"), threshold),
         RunError::Cancelled => VerificationResult::zero("Verification cancelled.".to_string(), threshold),
@@ -463,6 +465,7 @@ pub fn rust_run_main(exercise: &Exercise, rust_cfg: &RustConfig, cancel: &Verify
   let mut compile_cmd = Command::new(&compile_bin);
   compile_cmd.args(&run_args).current_dir(&exercise.dir);
   let Ok(compile_run) = run_command_cancellable(&mut compile_cmd, cancel) else {
+    let _ = fs::remove_file(&run_bin);
     return String::new();
   };
 
