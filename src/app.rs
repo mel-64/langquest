@@ -520,6 +520,13 @@ impl App {
 
     let result = self.event_loop(&mut terminal);
 
+    // Cancel any possibly running verification, then remove cargo build cache if present
+    self.verify_generation.store(self.verify_request_id.wrapping_add(1), Ordering::Relaxed);
+    if self.current_exercise().language == Language::Rust {
+      std::thread::sleep(Duration::from_millis(100));
+      let _ = std::fs::remove_dir_all(self.current_exercise().dir.join("target"));
+    }
+
     // Always restore terminal state, even on error.
     let _ = crossterm::terminal::disable_raw_mode();
     let _ = crossterm::execute!(
