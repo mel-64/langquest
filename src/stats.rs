@@ -458,6 +458,7 @@ mod tests {
       solution_source: None,
       solution_data,
       test_count: 0,
+      threshold: exercise::Language::Rust.threshold(),
     }
   }
 

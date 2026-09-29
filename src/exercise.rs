@@ -252,6 +252,9 @@ pub struct Exercise {
   /// the test source (so the total is known before the exercise is verified).
   /// `0` when none are found or the language is not test-based.
   pub test_count: usize,
+  /// Passing-threshold for this exercise. May be overwriten, else language
+  /// default.
+  pub threshold: f64,
 }
 
 // ---------------------------------------------------------------------------
@@ -296,7 +299,7 @@ impl TreeNode {
 ///
 /// All fields are optional so we can produce precise missing-field errors
 /// rather than relying on serde's generic messages.
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 struct RawFrontmatter {
   id: Option<String>,
   name: Option<String>,
@@ -305,6 +308,7 @@ struct RawFrontmatter {
   description: Option<String>,
   topics: Option<Vec<String>>,
   source: Option<String>, // Optional source *overwrite*
+  threshold: Option<f64>, // Optional threshold *overwrite*
 }
 
 /// Split a markdown document into its TOML frontmatter and body.
@@ -359,6 +363,7 @@ struct ValidatedFrontmatter {
   description: String,
   topics: Vec<String>,
   source: Option<String>,
+  threshold: Option<f64>,
 }
 
 /// Validate and convert [`RawFrontmatter`] into the fields needed by [`Exercise`].
@@ -415,6 +420,7 @@ fn validate_frontmatter(raw: RawFrontmatter, path: &Path) -> Result<ValidatedFro
     description,
     topics,
     source: raw.source,
+    threshold: raw.threshold,
   })
 }
 
@@ -498,6 +504,7 @@ pub fn load_exercise(exercise_dir: &Path, module_name: &str) -> Result<Exercise,
     solution_source,
     solution_data,
     test_count,
+    threshold: fm.threshold.unwrap_or(fm.language.threshold()).clamp(0.0, 1.0),
   })
 }
 
@@ -842,6 +849,28 @@ mod tests {
     assert!((Language::Rust.threshold() - 1.0).abs() < f64::EPSILON);
     assert!((Language::Riscv.threshold() - 0.8).abs() < f64::EPSILON);
     assert!((Language::Text.threshold() - 0.75).abs() < f64::EPSILON);
+  }
+
+  #[test]
+  fn test_frontmatter_threshold_overwrite() {
+    // No overwrite
+    let raw = RawFrontmatter {
+      id: Some("t".to_owned()),
+      name: Some("T".to_owned()),
+      language: Some("text".to_owned()),
+      difficulty: Some(1),
+      description: Some(String::new()),
+      topics: Some(vec![]),
+      source: None,
+      threshold: None,
+    };
+    let fm = validate_frontmatter(raw.clone(), Path::new("x")).unwrap();
+    assert!(fm.threshold.is_none());
+
+    // With overwrite
+    let raw_with = RawFrontmatter { threshold: Some(1.0), ..raw };
+    let fm = validate_frontmatter(raw_with, Path::new("x")).unwrap();
+    assert!((fm.threshold.unwrap()) == 1.0);
   }
 
   #[test]
