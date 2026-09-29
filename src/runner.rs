@@ -2086,6 +2086,21 @@ mod tests {
   }
 
   #[test]
+  fn verify_text_checkbox_line_numbers() {
+    let ticked = text_exercise(
+      &format!("{ANSWER_MARKER}\n\n1A []\n1B [x]\n2A [x]\n2B []\n"),
+      &[
+        "s/(?m)^1B\\s*\\[\\s*x\\s*\\]/",
+        "s/(?m)^2A\\s*\\[\\s*x\\s*\\]/",
+        "s/(?m)^1A\\s*\\[\\s*\\]/",
+        "s/(?m)^2B\\s*\\[\\s*\\]/",
+      ],
+    );
+    assert_eq!(verify_text(&ticked, true, None).passed, 4);
+    let _ = fs::remove_dir_all(&ticked.dir);
+  }
+
+  #[test]
   fn verify_text_plain_keyword_is_literal_not_regex() {
     // Without the `s/.../` wrapper, regex metacharacters are matched verbatim:
     // `[^-]->` is literal text that is absent, while its regex form matches.
