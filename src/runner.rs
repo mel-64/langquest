@@ -1519,6 +1519,7 @@ fn keyword_matches(kw: &str, content: &str) -> bool {
     // `s/PATTERN/` — case-insensitive regex. An invalid pattern never matches.
     return RegexBuilder::new(pattern)
       .case_insensitive(true)
+      .ignore_whitespace(true) // verbose mode
       .build()
       .map(|re| re.is_match(content))
       .unwrap_or(false);
