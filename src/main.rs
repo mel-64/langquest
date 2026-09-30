@@ -44,6 +44,8 @@ struct Cli {
 /// Subcommands available in `lq`.
 #[derive(Subcommand)]
 enum Command {
+  /// Scaffold a new lq.toml based on the discovered exercise structure
+  Init,
   /// Print current exercise and overall progress
   Status,
   /// Check if every exercise in the repo parses correctly
@@ -72,6 +74,7 @@ fn main() -> Result<()> {
   }
 
   match cli.command {
+    Some(Command::Init) => handle_init(cli.repo),
     Some(Command::Status) => handle_status(cli.repo),
     Some(Command::Verify) => handle_verify(cli.repo),
     Some(Command::SealSolutions) => handle_seal_solutions(cli.repo),
@@ -155,26 +158,66 @@ fn handle_reset(repo: Option<PathBuf>) -> Result<()> {
   Ok(())
 }
 
-/// Handle the `verify` subcommand: run exercise discovery over the repo and
-/// report every exercise that failed to load.
-/// Exits with a non-zero status if any exercise failed to parse.
+/// Run exercise discovery over the repo, print the load summary (including
+/// every exercise that failed to parse), and return the results.
+fn verify_repo(repo_path: &std::path::Path) -> (Vec<exercise::Exercise>, Vec<(PathBuf, lq::error::ExerciseError)>) {
+  let (_tree, all_exercises, errors) = exercise::discover_exercises(repo_path);
+  println!("Exercises loaded: {}", all_exercises.len());
+  if !errors.is_empty() {
+    println!("Failed exercises: {}", errors.len());
+    for (path, err) in &errors {
+      println!("  {}:", path.display());
+      println!("    {err}");
+    }
+  }
+  (all_exercises, errors)
+}
+
+/// Handle the `verify` subcommand: report whether every exercise in the repo
+/// parses correctly. Exits with a non-zero status if any exercise failed.
 fn handle_verify(repo: Option<PathBuf>) -> Result<()> {
   let repo_path = config::resolve_repo_path(repo.as_deref());
-  let (_tree, all_exercises, errors) = exercise::discover_exercises(&repo_path);
+  let (_all_exercises, errors) = verify_repo(&repo_path);
 
-  println!("Exercises loaded: {}", all_exercises.len());
+  if !errors.is_empty() {
+    std::process::exit(1);
+  };
 
-  if errors.is_empty() {
-    println!("All exercises parse correctly.");
-    return Ok(());
+  println!("All exercises parse correctly.");
+  Ok(())
+}
+
+/// Handle the `init` subcommand: verify the repo's exercise structure and
+/// scaffold a fresh `lq.toml` from it. Does not overwrite an existing lq.toml.
+fn handle_init(repo: Option<PathBuf>) -> Result<()> {
+  let repo_path = config::resolve_repo_path(repo.as_deref());
+  let cfg_path = config::config_path(&repo_path);
+  if cfg_path.exists() {
+    anyhow::bail!("{} already exists", cfg_path.display());
+  }
+  if config::progress_path(&cfg_path).exists() {
+    anyhow::bail!("progress file {} already exists", config::progress_path(&cfg_path).display());
   }
 
-  println!("Failed exercises: {}", errors.len());
-  for (path, err) in &errors {
-    println!("  {}:", path.display());
-    println!("    {err}");
+  let (all_exercises, errors) = verify_repo(&repo_path);
+  if !errors.is_empty() {
+    anyhow::bail!("refusing to scaffold: exercises failed to parse");
   }
-  std::process::exit(1);
+  if all_exercises.is_empty() {
+    anyhow::bail!("no exercises found in {}.", repo_path.display());
+  }
+
+  let mut cfg = config::ProjectConfig {
+    current_exercise: all_exercises.first().map(|e| e.relative_path.clone()),
+    ..Default::default()
+  };
+  for exercise in &all_exercises {
+    cfg.exercises.entry(exercise.relative_path.clone()).or_default();
+  }
+  cfg.save(&cfg_path)?;
+
+  println!("Scaffolded {}.", cfg_path.display());
+  Ok(())
 }
 
 /// Handle the `status` subcommand.
