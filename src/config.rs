@@ -583,9 +583,7 @@ pub fn resolve_repo_path(cli_repo: Option<&Path>) -> anyhow::Result<PathBuf> {
     Some(p) => Ok(p.canonicalize().unwrap_or_else(|_| p.to_path_buf())),
     None => {
       let cwd = std::env::current_dir()?;
-      find_repo_root(&cwd).ok_or_else(|| {
-        anyhow::anyhow!("repository root not found: no lq.toml in {} or any parent", cwd.display())
-      })
+      find_repo_root(&cwd).ok_or_else(|| anyhow::anyhow!("repository root not found: no lq.toml in {} or any parent", cwd.display()))
     }
   }
 }
