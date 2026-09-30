@@ -2101,6 +2101,31 @@ mod tests {
   }
 
   #[test]
+  fn verify_text_checkbox_whitespace_insensitive() {
+    // Students might leave whitespace around checkboxes
+    let exercise = text_exercise(
+      &format!("{ANSWER_MARKER}\n\n- [x ] 1B\n- [      x] 2A\n-[x]2B\n-   [x]   1A\n- [x]\t2B\n"),
+      &[
+        "s/(?m)^-\\s*\\[\\s*x\\s*\\]\\s*1B/",
+        "s/(?m)^-\\s*\\[\\s*x\\s*\\]\\s*2A/",
+        "s/(?m)^-\\s*\\[\\s*x\\s*\\]\\s*2B/",
+      ],
+    );
+    assert_eq!(verify_text(&exercise, true, None).passed, 3);
+    let _ = fs::remove_dir_all(&exercise.dir);
+  }
+
+  #[test]
+  fn verify_text_checkbox_wrong_tick_not_counted() {
+    let wrong_tick = text_exercise(
+      &format!("{ANSWER_MARKER}\n\n- [x] 1A\n- [ ] 1B\n"),
+      &["s/(?m)^-\\s*\\[\\s*\\]\\s*1A/", "s/(?m)^-\\s*\\[\\s*x\\s*\\]\\s*1B/"],
+    );
+    assert_eq!(verify_text(&wrong_tick, true, None).passed, 0);
+    let _ = fs::remove_dir_all(&wrong_tick.dir);
+  }
+
+  #[test]
   fn verify_text_plain_keyword_is_literal_not_regex() {
     // Without the `s/.../` wrapper, regex metacharacters are matched verbatim:
     // `[^-]->` is literal text that is absent, while its regex form matches.
