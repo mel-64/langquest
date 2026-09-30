@@ -15,16 +15,16 @@ In `main.md`, put an `x` into the brackets of every correct option. Keep everyth
 ## Example
 
 **1.** Which numbers are primes?
-1A [ ] 91
-1B [ ] 8
-1C [ ] 23
-1D [ ] 67
+- [ ] 1A - 91
+- [ ] 1B - 8
+- [ ] 1C - 23
+- [ ] 1D - 67
 
 ## Solution
 
 **1.** Which numbers are primes?
-1A [ ] 91
-1B [ ] 8
-1C [x] 23
-1D [x] 67
+- [ ] 1A - 91
+- [ ] 1B - 8
+- [x] 1C - 23
+- [x] 1D - 67
 

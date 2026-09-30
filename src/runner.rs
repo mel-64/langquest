@@ -2088,12 +2088,12 @@ mod tests {
   #[test]
   fn verify_text_checkbox_line_numbers() {
     let ticked = text_exercise(
-      &format!("{ANSWER_MARKER}\n\n1A []\n1B [x]\n2A [x]\n2B []\n"),
+      &format!("{ANSWER_MARKER}\n\n- [ ] 1A - 91\n- [x] 1B - 7\n- [x] 2A - 13\n- [ ] 2B - 15\n"),
       &[
-        "s/(?m)^1B\\s*\\[\\s*x\\s*\\]/",
-        "s/(?m)^2A\\s*\\[\\s*x\\s*\\]/",
-        "s/(?m)^1A\\s*\\[\\s*\\]/",
-        "s/(?m)^2B\\s*\\[\\s*\\]/",
+        "s/(?m)^-\\s*\\[\\s*x\\s*\\]\\s*1B/",
+        "s/(?m)^-\\s*\\[\\s*x\\s*\\]\\s*2A/",
+        "s/(?m)^-\\s*\\[\\s*\\]\\s*1A/",
+        "s/(?m)^-\\s*\\[\\s*\\]\\s*2B/",
       ],
     );
     assert_eq!(verify_text(&ticked, true, None).passed, 4);
