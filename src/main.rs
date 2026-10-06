@@ -1,10 +1,11 @@
 #![deny(clippy::all)]
 
-use std::io::{BufRead, Write};
+use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use lq::utils::Question;
 use lq::{app, config, exercise, stats};
 use sha2::{Digest, Sha256};
 
@@ -128,13 +129,12 @@ fn handle_reset(repo: Option<PathBuf>) -> Result<()> {
   let repo_path = config::resolve_repo_path(repo.as_deref())?;
 
   println!("[!] This will delete all progress in lq.toml. This cannot be undone.");
-  print!("    Type \"yes\" to confirm, or anything else to cancel: ");
-  std::io::stdout().flush()?;
 
-  let mut input = String::new();
-  std::io::stdin().lock().read_line(&mut input)?;
+  let answer = Question::ask("    Type \"yes, reset progress\" to confirm.")
+    .exact_yes("yes, reset progress")
+    .prompt()?;
 
-  if input.trim() != "yes" {
+  if !answer {
     println!("Cancelled.");
     return Ok(());
   }
