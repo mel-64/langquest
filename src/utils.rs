@@ -89,3 +89,67 @@ impl Question {
     }
   }
 }
+
+/// Builder for picking one of a fixed set of options.
+///
+/// ```no_run
+/// use lq::utils::Select;
+///
+/// let options = ["easy", "medium", "hard"];
+/// let choice = Select::of("Choose an option: ", &options).default(1).prompt().unwrap();
+/// ```
+pub struct Select<'a> {
+  msg: String,
+  options: &'a [&'a str],
+  default: Option<usize>,
+}
+
+impl<'a> Select<'a> {
+  /// Create a selection prompt with the given options.
+  /// Panics when `options` is empty.
+  pub fn of(msg: impl Into<String>, options: &'a [&'a str]) -> Self {
+    assert!(!options.is_empty(), "Select needs at least one option");
+    Self {
+      msg: msg.into(),
+      options,
+      default: None,
+    }
+  }
+
+  /// Set the default option by index. It is marked with `>` in the list and
+  /// shown as the prompt hint.
+  pub fn default(mut self, default: usize) -> Self {
+    assert!(default < self.options.len(), "default index out of bounds");
+    self.default = Some(default);
+    self
+  }
+
+  /// Print the numbered options and read a choice from stdin.
+  /// Returns the index of the chosen option. Enter selects the default of set.
+  pub fn prompt(self) -> io::Result<usize> {
+    loop {
+      println!("{}", self.msg);
+      for (i, option) in self.options.iter().enumerate() {
+        let marker = if self.default == Some(i) { ">" } else { " " };
+        println!("  {marker} {i}. {option}");
+      }
+      print!("Enter a number: ");
+      io::stdout().flush()?;
+
+      let mut input = String::new();
+      io::stdin().read_line(&mut input)?;
+      let input = input.trim();
+
+      if input.is_empty() {
+        if let Some(i) = self.default {
+          return Ok(i);
+        }
+      } else if let Ok(n) = input.parse::<usize>()
+        && n < self.options.len()
+      {
+        return Ok(n);
+      }
+      println!("Invalid answer. Try again..");
+    }
+  }
+}

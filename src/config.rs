@@ -4,14 +4,20 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use anyhow::Error;
 use serde::{Deserialize, Serialize};
 
 use crate::error::ConfigError;
 use crate::identity::GithubIdentity;
+use crate::utils::Select;
 
 /// Embedded key used to seal the on-disk progress file.
 const PROGRESS_STR: &str = env!("PROGRESS_KEY");
 const PROGRESS_KEY: [u8; 32] = unsafe { *PROGRESS_STR.as_ptr().cast::<[u8; 32]>() }; // ok due to build.rs checking key size | safe "tryinto" error as not yet stable on const traits
+
+/// Max depth and height for repository discovery.
+const MAX_RECURSE_DEPTH: usize = 2;
+const MAX_WALK_HEIGHT: usize = 3;
 
 /// Filename of the encrypted progress file, stored alongside `lq.toml`.
 pub const PROGRESS_FILE: &str = ".lq.progress";
@@ -583,18 +589,57 @@ pub fn resolve_repo_path(cli_repo: Option<&Path>) -> anyhow::Result<PathBuf> {
     Some(p) => Ok(p.canonicalize().unwrap_or_else(|_| p.to_path_buf())),
     None => {
       let cwd = std::env::current_dir()?;
-      find_repo_root(&cwd).ok_or_else(|| anyhow::anyhow!("repository root not found: no lq.toml in {} or any parent", cwd.display()))
+      find_repo_root(&cwd)?.ok_or_else(|| anyhow::anyhow!("repository root not found: no lq.toml found."))
     }
   }
 }
 
-/// Search `start` and its ancestors for a directory containing `lq.toml`.
-pub fn find_repo_root(start: &Path) -> Option<PathBuf> {
-  std::fs::canonicalize(start)
-    .ok()?
+/// Search `start` and search a maximum of MAX_RECURSE_DEPTH & MAX_WALK_HEIGHT
+/// If a `lq.toml` is found in a subdirectory, directories above aren't
+/// searched.
+pub fn find_repo_root(start: &Path) -> Result<Option<PathBuf>, Error> {
+  let res = std::fs::canonicalize(start)?
     .ancestors()
+    .take(MAX_WALK_HEIGHT)
     .find(|dir| dir.join("lq.toml").exists())
-    .map(Path::to_path_buf)
+    .map(Path::to_path_buf);
+
+  if res.is_none() {
+    let mut files: Vec<PathBuf> = vec![];
+    find_file_recursively(start, &mut files, 0)?;
+    return match files.len() {
+      0 => Ok(None),
+      1 => Ok(files.pop()),
+      2.. => {
+        println!("No repos were found in the current directory but multiple ones were found close to this one.");
+        let mut options: Vec<&str> = files.iter().map(|f| f.to_str().unwrap()).collect();
+        options.push("None");
+        let selection = Select::of("Choose a directory to open it in langquest.", &options).default(0).prompt()?;
+        if selection == options.len() - 1 {
+          return Ok(None);
+        }
+        Ok(Some(files[selection].clone()))
+      }
+    };
+  };
+  Ok(res)
+}
+
+fn find_file_recursively(dir: &Path, files: &mut Vec<PathBuf>, depth: usize) -> Result<(), Error> {
+  if depth > MAX_RECURSE_DEPTH {
+    return Ok(());
+  };
+  for entry in fs::read_dir(dir)? {
+    let path = entry?.path();
+    if path.is_dir() {
+      let candidate = path.join("lq.toml");
+      if candidate.exists() && candidate.is_file() {
+        files.push(path.to_owned());
+      }
+      find_file_recursively(&path, files, depth + 1)?
+    }
+  }
+  Ok(())
 }
 
 /// Return the path to the `lq.toml` config file within the given repo root.
@@ -886,8 +931,8 @@ mod tests {
     fs::create_dir_all(&nested).expect("create dirs");
     fs::File::create(root.join("lq.toml")).expect("create lq.toml");
 
-    let found = find_repo_root(&nested).expect("root found");
-    assert_eq!(found, fs::canonicalize(&root).expect("canonicalize"));
+    let found = find_repo_root(&nested).expect("root found").unwrap();
+    assert_eq!(found, fs::canonicalize(&root).unwrap());
 
     let _ = fs::remove_dir_all(&root);
   }
@@ -897,7 +942,7 @@ mod tests {
     let dir = std::env::temp_dir().join("lq_test_find_root_none");
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).expect("create dir");
-    assert!(find_repo_root(&dir).is_none());
+    assert!(find_repo_root(&dir).unwrap().is_none());
     let _ = fs::remove_dir_all(&dir);
   }
 
