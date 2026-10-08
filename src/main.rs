@@ -190,7 +190,12 @@ fn handle_verify(repo: Option<PathBuf>) -> Result<()> {
 /// Handle the `init` subcommand: verify the repo's exercise structure and
 /// scaffold a fresh `lq.toml` from it. Does not overwrite an existing lq.toml.
 fn handle_init(repo: Option<PathBuf>) -> Result<()> {
-  let repo_path = config::resolve_repo_path(repo.as_deref())?;
+  let repo_path = match repo {
+    Some(p) => config::resolve_repo_path(Some(&p))?,
+    // If there's no valid repo yet, we can't pass it into resolve_repo_path as that tries to find
+    // an existing repo
+    None => std::env::current_dir()?,
+  };
   let cfg_path = config::config_path(&repo_path);
   if cfg_path.exists() {
     anyhow::bail!("{} already exists", cfg_path.display());
